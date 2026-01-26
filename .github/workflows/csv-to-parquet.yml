@@ -1,0 +1,44 @@
+name: Build Parquet Dataset
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 0" # weekly refresh
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install DuckDB
+        run: |
+          curl -L https://github.com/duckdb/duckdb/releases/download/v0.10.2/duckdb_cli-linux-amd64.zip -o duckdb.zip
+          unzip duckdb.zip
+          chmod +x duckdb
+
+      - name: Convert CSV to Parquet
+        run: |
+          ./duckdb << 'EOF'
+          COPY (
+            SELECT
+              rank,
+              title,
+              year,
+              rating,
+              votes
+            FROM read_csv_auto('imdb_top_250.csv')
+          )
+          TO 'imdb_top_250.parquet' (FORMAT PARQUET);
+          EOF
+
+      - name: Commit Parquet
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add imdb_top_250.parquet
+          git commit -m "Build Parquet dataset" || echo "No changes"
+          git push
